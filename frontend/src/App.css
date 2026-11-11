@@ -1,0 +1,200 @@
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2.5rem 1rem;
+  color: #f1f5f9;
+  background: #0f172a;
+}
+
+.app-header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.app-header h1 {
+  margin: 0;
+  color: #818cf8;
+  font-size: 2.25rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.app-header p {
+  margin: 0.5rem 0 0;
+  color: #94a3b8;
+}
+
+.dashboard {
+  width: 100%;
+  max-width: 48rem;
+  padding: 1.5rem;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  background: #1e293b;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.2);
+}
+
+.analysis-form,
+.analysis-form > div {
+  display: grid;
+  gap: 1rem;
+}
+
+.analysis-form label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #cbd5e1;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.analysis-form textarea {
+  width: 100%;
+  resize: vertical;
+  box-sizing: border-box;
+  padding: 0.75rem;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  outline: none;
+  color: #f1f5f9;
+  background: #0f172a;
+  font: inherit;
+}
+
+.analysis-form textarea:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgb(99 102 241 / 0.35);
+}
+
+.analysis-form textarea::placeholder {
+  color: #64748b;
+}
+
+.analysis-form button {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  color: #fff;
+  background: #4f46e5;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 200ms ease;
+}
+
+.analysis-form button:hover:not(:disabled) {
+  background: #6366f1;
+}
+
+.analysis-form button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+.error-message {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #b91c1c;
+  border-radius: 0.5rem;
+  color: #fecaca;
+  background: rgb(127 29 29 / 0.5);
+}
+
+.results {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.results h2 {
+  margin: 0 0 0.75rem;
+  color: #a5b4fc;
+  font-size: 1.25rem;
+}
+
+.analogy,
+.step,
+.quiz {
+  padding: 1rem;
+  border: 1px solid #475569;
+  border-radius: 0.5rem;
+  background: rgb(15 23 42 / 0.65);
+}
+
+.analogy h2 {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.results p {
+  margin: 0;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+
+.steps {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.step {
+  background: rgb(51 65 85 / 0.5);
+}
+
+.step h3 {
+  margin: 0 0 0.25rem;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.step p,
+.quiz li {
+  font-size: 0.875rem;
+}
+
+.quiz {
+  padding: 1.25rem;
+  border-color: rgb(67 56 202 / 0.6);
+  background: rgb(30 27 75 / 0.4);
+}
+
+.quiz .quiz-question {
+  margin-bottom: 0.75rem;
+  color: #fff;
+  font-weight: 500;
+}
+
+.quiz ul {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quiz li {
+  padding: 0.625rem;
+  border: 1px solid #334155;
+  border-radius: 0.25rem;
+  color: #cbd5e1;
+  background: #0f172a;
+}
+
+.quiz .correct-answer {
+  margin-top: 0.75rem;
+  color: #818cf8;
+  font-size: 0.75rem;
+}
+
+@media (max-width: 480px) {
+  .app-shell {
+    padding: 2rem 0.75rem;
+  }
+
+  .dashboard {
+    padding: 1rem;
+  }
+}
