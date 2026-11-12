@@ -7,6 +7,7 @@ const { GoogleGenAI } = require('@google/genai');
 const app = express();
 const port = process.env.PORT || 5000;
 const apiKey = process.env.GEMINI_API_KEY;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 if (!apiKey) {
   throw new Error('GEMINI_API_KEY is required to start the SkillScribe backend.');
@@ -49,10 +50,26 @@ Return pure JSON without any extra text or conversational filler.
 `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-    });
+  let response;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+      });
+      break;
+    } catch (error) {
+      if (error.status !== 503 || attempt >= 2) {
+        throw error;
+      }
+
+      const delay = 1000 * 2 ** attempt;
+      console.warn(
+        `Gemini is temporarily unavailable; retrying in ${delay}ms.`
+      );
+      await sleep(delay);
+    }
+    }
 
     const rawText = response.text;
     if (typeof rawText !== 'string' || rawText.trim() === '') {
@@ -92,6 +109,13 @@ Return pure JSON without any extra text or conversational filler.
     });
   } catch (error) {
     console.error('Error processing breakdown with Gemini:', error);
+    if (error.status === 503) {
+      return res.status(503).json({
+        success: false,
+        error: 'Gemini is temporarily experiencing high demand. Please try again shortly.',
+      });
+    }
+
     res.status(500).json({
       success: false,
       error: 'Failed to process the analysis request. Please verify your API key and input.',
