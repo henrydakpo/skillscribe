@@ -1,17 +1,26 @@
 import React, { useState } from 'react';
+import LandingGateway from './components/LandingGateway';
 import './App.css';
 
 const API_BASE_URL =
   process.env.REACT_APP_API_URL || 'http://localhost:5501';
 
 function App() {
+  const [user, setUser] = useState(null);
   const [inputContent, setInputContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
-  const handleAnalyze = async (e) => {
-    e.preventDefault();
+  const enterDashboard = (userData) => {
+    setUser(userData);
+    setInputContent(userData.initialContent || '');
+    setResult(null);
+    setError('');
+  };
+
+  const handleAnalyze = async (event) => {
+    event.preventDefault();
     if (!inputContent.trim()) return;
 
     setLoading(true);
@@ -32,18 +41,34 @@ function App() {
       }
 
       setResult(data.data);
-    } catch (err) {
-      setError(err.message);
+    } catch (requestError) {
+      setError(requestError.message);
     } finally {
       setLoading(false);
     }
   };
 
+  if (!user) {
+    return <LandingGateway onEnterDashboard={enterDashboard} />;
+  }
+
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <h1>SkillScribe</h1>
-        <p>Interactive Micro-Mentorship &amp; Visual Explainers</p>
+      <header className="app-header dashboard-header">
+        <div>
+          <h1>SkillScribe Dashboard</h1>
+          <p>
+            Demo session: <span>{user.email}</span>
+            {user.isGuest ? ' (Guest)' : ' (Authentication not connected)'}
+          </p>
+        </div>
+        <button
+          className="sign-out-button"
+          onClick={() => setUser(null)}
+          type="button"
+        >
+          Sign Out
+        </button>
       </header>
 
       <main className="dashboard">
@@ -57,7 +82,7 @@ function App() {
               rows="5"
               placeholder="e.g., Explain React useEffect cleanup functions or paste an asynchronous JavaScript snippet..."
               value={inputContent}
-              onChange={(e) => setInputContent(e.target.value)}
+              onChange={(event) => setInputContent(event.target.value)}
             />
           </div>
           <button type="submit" disabled={loading}>
