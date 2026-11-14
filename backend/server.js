@@ -3,10 +3,17 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { GoogleGenAI } = require('@google/genai');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { Pool } = require('pg');
 
 const app = express();
 const port = process.env.PORT || 5000;
 const apiKey = process.env.GEMINI_API_KEY;
+const jwtSecret = process.env.JWT_SECRET;
+const pool = process.env.DATABASE_URL
+  ? new Pool({ connectionString: process.env.DATABASE_URL })
+  : null;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 if (!apiKey) {
@@ -20,6 +27,119 @@ app.use(express.json());
 
 app.get('/', (req, res) => {
   res.json({ status: 'active', service: 'SkillScribe Backend API' });
+});
+
+function getCredentials(req, res, isSignup) {
+  const { email, password } = req.body || {};
+  if (typeof email !== 'string' || typeof password !== 'string') {
+    res.status(400).json({ error: 'Email and password are required.' });
+    return null;
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const passwordBytes = Buffer.byteLength(password, 'utf8');
+  if (
+    normalizedEmail.length === 0 ||
+    normalizedEmail.length > 254 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
+  ) {
+    res.status(400).json({ error: 'Enter a valid email address.' });
+    return null;
+  }
+
+  if (passwordBytes === 0 || passwordBytes > 72) {
+    res.status(400).json({
+      error: 'Password must be between 1 and 72 bytes.',
+    });
+    return null;
+  }
+
+  if (isSignup && (Array.from(password).length < 8 || passwordBytes < 8)) {
+    res.status(400).json({
+      error: 'Password must be at least 8 characters long.',
+    });
+    return null;
+  }
+
+  return { email: normalizedEmail, password };
+}
+
+function authIsConfigured(res) {
+  if (!pool || !jwtSecret || Buffer.byteLength(jwtSecret, 'utf8') < 32) {
+    res.status(503).json({
+      error:
+        'Authentication is not configured. Set DATABASE_URL and a JWT_SECRET of at least 32 characters.',
+    });
+    return false;
+  }
+
+  return true;
+}
+
+app.post('/api/auth/signup', async (req, res) => {
+  const credentials = getCredentials(req, res, true);
+  if (!credentials || !authIsConfigured(res)) return;
+
+  try {
+    const passwordHash = await bcrypt.hash(credentials.password, 12);
+    const result = await pool.query(
+      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at',
+      [credentials.email, passwordHash]
+    );
+    const user = result.rows[0];
+    const token = jwt.sign(
+      { email: user.email },
+      jwtSecret,
+      { subject: String(user.id), expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      message: 'User created successfully.',
+      token,
+      user: { id: user.id, email: user.email },
+    });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Email is already registered.' });
+    }
+
+    console.error('Signup failed:', error.message);
+    res.status(500).json({ error: 'Server error during signup.' });
+  }
+});
+
+app.post('/api/auth/signin', async (req, res) => {
+  const credentials = getCredentials(req, res, false);
+  if (!credentials || !authIsConfigured(res)) return;
+
+  try {
+    const result = await pool.query(
+      'SELECT id, email, password_hash FROM users WHERE email = $1',
+      [credentials.email]
+    );
+    const user = result.rows[0];
+    if (
+      !user ||
+      !(await bcrypt.compare(credentials.password, user.password_hash))
+    ) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    const token = jwt.sign(
+      { email: user.email },
+      jwtSecret,
+      { subject: String(user.id), expiresIn: '7d' }
+    );
+
+    res.json({
+      message: 'Signed in successfully.',
+      token,
+      user: { id: user.id, email: user.email },
+    });
+  } catch (error) {
+    console.error('Signin failed:', error.message);
+    res.status(500).json({ error: 'Server error during signin.' });
+  }
 });
 
 app.post('/api/analyze', async (req, res) => {
