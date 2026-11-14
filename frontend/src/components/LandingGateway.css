@@ -175,6 +175,12 @@
   background: linear-gradient(110deg, #6366f1, #805ad5);
 }
 
+.gateway-primary:disabled {
+  cursor: wait;
+  opacity: 0.6;
+  transform: none;
+}
+
 .guest-launch {
   flex: 0 0 auto;
   padding: 0.75rem 1rem;
@@ -224,6 +230,22 @@
   box-shadow: 0 6px 16px rgb(79 70 229 / 0.25);
 }
 
+.auth-tabs button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.auth-error {
+  margin-top: 1.25rem;
+  padding: 0.75rem;
+  border: 1px solid rgb(248 113 113 / 0.35);
+  border-radius: 0.7rem;
+  color: #fca5a5;
+  background: rgb(127 29 29 / 0.2);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 .auth-form {
   display: grid;
   gap: 1.125rem;
@@ -257,7 +279,7 @@
   font-size: 0.875rem;
 }
 
-.auth-demo-notice {
+.auth-security-notice {
   margin: -0.5rem 0 0;
   color: #94a3b8;
   font-size: 0.75rem;

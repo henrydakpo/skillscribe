@@ -58,8 +58,11 @@ function App() {
         <div>
           <h1>SkillScribe Dashboard</h1>
           <p>
-            Demo session: <span>{user.email}</span>
-            {user.isGuest ? ' (Guest)' : ' (Authentication not connected)'}
+            {user.isGuest ? (
+              <>Guest session: <span>{user.email}</span></>
+            ) : (
+              <>Signed in as: <span>{user.email}</span></>
+            )}
           </p>
         </div>
         <button

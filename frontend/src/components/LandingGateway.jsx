@@ -3,18 +3,62 @@ import './LandingGateway.css';
 
 export default function LandingGateway({ onEnterDashboard }) {
   const [authMode, setAuthMode] = useState('signin');
-  const [email, setEmail] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [guestSnippet, setGuestSnippet] = useState(
     'function debounce(fn, delay) { ... }'
   );
 
-  const handleSubmitAuth = (event) => {
+  const apiUrl =
+    process.env.REACT_APP_API_URL || 'http://localhost:5501';
+
+  const handleSubmitAuth = async (event) => {
     event.preventDefault();
-    onEnterDashboard({
-      email,
-      isGuest: false,
-      initialContent: '',
-    });
+    setError('');
+    setLoading(true);
+
+    const formData = new FormData(event.currentTarget);
+    const email = formData.get('email');
+    const password = formData.get('password');
+    const endpoint =
+      authMode === 'signup' ? '/api/auth/signup' : '/api/auth/signin';
+    let authenticatedUser = null;
+
+    try {
+      const response = await fetch(`${apiUrl}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Authentication failed.');
+      }
+
+      if (
+        typeof data.token !== 'string' ||
+        !data.user ||
+        typeof data.user.email !== 'string'
+      ) {
+        throw new Error('The server returned an invalid authentication response.');
+      }
+
+      authenticatedUser = {
+        email: data.user.email,
+        isGuest: false,
+        token: data.token,
+        initialContent: '',
+      };
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+
+    if (authenticatedUser) {
+      onEnterDashboard(authenticatedUser);
+    }
   };
 
   const handleGuestAccess = (initialContent = '') => {
@@ -76,12 +120,16 @@ export default function LandingGateway({ onEnterDashboard }) {
           </div>
         </section>
 
-        <section className="auth-card" aria-label="Demo access">
+        <section className="auth-card" aria-label="Account access">
           <div className="auth-tabs" role="tablist" aria-label="Account options">
             <button
               aria-selected={authMode === 'signin'}
               className={authMode === 'signin' ? 'active' : ''}
-              onClick={() => setAuthMode('signin')}
+              disabled={loading}
+              onClick={() => {
+                setAuthMode('signin');
+                setError('');
+              }}
               role="tab"
               type="button"
             >
@@ -90,7 +138,11 @@ export default function LandingGateway({ onEnterDashboard }) {
             <button
               aria-selected={authMode === 'signup'}
               className={authMode === 'signup' ? 'active' : ''}
-              onClick={() => setAuthMode('signup')}
+              disabled={loading}
+              onClick={() => {
+                setAuthMode('signup');
+                setError('');
+              }}
               role="tab"
               type="button"
             >
@@ -98,17 +150,22 @@ export default function LandingGateway({ onEnterDashboard }) {
             </button>
           </div>
 
+          {error && (
+            <div className="auth-error" role="alert">
+              {error}
+            </div>
+          )}
+
           <form className="auth-form" onSubmit={handleSubmitAuth}>
             <div className="auth-field">
               <label htmlFor="auth-email">Email Address</label>
               <input
                 autoComplete="email"
                 id="auth-email"
-                onChange={(event) => setEmail(event.target.value)}
+                name="email"
                 placeholder="name@example.com"
                 required
                 type="email"
-                value={email}
               />
             </div>
 
@@ -119,20 +176,28 @@ export default function LandingGateway({ onEnterDashboard }) {
                   authMode === 'signin' ? 'current-password' : 'new-password'
                 }
                 id="auth-password"
+                minLength={authMode === 'signup' ? 8 : undefined}
+                name="password"
                 placeholder="Enter a password"
                 required
                 type="password"
               />
             </div>
 
-            <button className="gateway-primary auth-submit" type="submit">
-              {authMode === 'signin'
+            <button
+              className="gateway-primary auth-submit"
+              disabled={loading}
+              type="submit"
+            >
+              {loading
+                ? 'Processing...'
+                : authMode === 'signin'
                 ? 'Access Dashboard'
                 : 'Create Account & Start'}
             </button>
-            <p className="auth-demo-notice">
-              Demo only: account authentication is not connected. Your password
-              is not sent or saved.
+            <p className="auth-security-notice">
+              Credentials are sent to the SkillScribe API. Your password is
+              never stored in browser storage.
             </p>
           </form>
 

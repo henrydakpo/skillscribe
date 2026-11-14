@@ -1,14 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
 
-test('renders the SkillScribe gateway and demo authentication notice', () => {
+test('renders the SkillScribe gateway and authentication form', () => {
   render(<App />);
 
   expect(
     screen.getByRole('heading', { name: /master complex code & concepts/i })
   ).toBeInTheDocument();
   expect(
-    screen.getByText(/authentication is not connected/i)
+    screen.getByText(/credentials are sent to the skillscribe api/i)
   ).toBeInTheDocument();
   expect(
     screen.getByRole('button', { name: /continue as guest/i })
@@ -32,7 +32,77 @@ test('passes guest-entered text into the analysis dashboard', () => {
   ).toHaveValue('Explain closures');
   expect(
     screen.getByRole('banner')
-  ).toHaveTextContent(/demo session: guest user \(guest\)/i);
+  ).toHaveTextContent(/guest session: guest user/i);
+});
+
+test('creates an account through the API and keeps its token in memory', async () => {
+  localStorage.clear();
+  const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      token: 'test.jwt.token',
+      user: { id: '42', email: 'learner@example.com' },
+    }),
+  });
+
+  render(<App />);
+  fireEvent.click(screen.getByRole('tab', { name: /create account/i }));
+  fireEvent.change(screen.getByLabelText(/email address/i), {
+    target: { value: 'learner@example.com' },
+  });
+  fireEvent.change(screen.getByLabelText(/password/i), {
+    target: { value: 'a-secure-test-password' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: /create account & start/i }));
+
+  await waitFor(() => {
+    expect(
+      screen.getByRole('heading', { name: /skillscribe dashboard/i })
+    ).toBeInTheDocument();
+  });
+  expect(screen.getByRole('banner')).toHaveTextContent(
+    /signed in as: learner@example\.com/i
+  );
+  expect(fetchSpy).toHaveBeenCalledWith(
+    `${process.env.REACT_APP_API_URL || 'http://localhost:5501'}/api/auth/signup`,
+    expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'learner@example.com',
+        password: 'a-secure-test-password',
+      }),
+    })
+  );
+  expect(localStorage.getItem('skillscribe_token')).toBeNull();
+  fetchSpy.mockRestore();
+});
+
+test('shows authentication API errors without leaving the gateway', async () => {
+  const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+    ok: false,
+    json: async () => ({ error: 'Invalid email or password.' }),
+  });
+
+  render(<App />);
+  fireEvent.change(screen.getByLabelText(/email address/i), {
+    target: { value: 'learner@example.com' },
+  });
+  fireEvent.change(screen.getByLabelText(/password/i), {
+    target: { value: 'incorrect-password' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: /access dashboard/i }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Invalid email or password.'
+  );
+  expect(
+    screen.getByRole('heading', { name: /master complex code & concepts/i })
+  ).toBeInTheDocument();
+  expect(fetchSpy).toHaveBeenCalledWith(
+    `${process.env.REACT_APP_API_URL || 'http://localhost:5501'}/api/auth/signin`,
+    expect.objectContaining({ method: 'POST' })
+  );
+  fetchSpy.mockRestore();
 });
 
 test('sends analysis requests to the configured API base URL', async () => {
