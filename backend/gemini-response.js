@@ -132,6 +132,21 @@ function normalizeGeminiAnalysis(parsedData) {
     quizquestions: 'quiz',
   });
 
+  if (
+    isRecord(normalized) &&
+    typeof normalized.step === 'string' &&
+    typeof normalized.explanation === 'string' &&
+    (!Array.isArray(normalized.breakdown_steps) ||
+      normalized.breakdown_steps.length === 3)
+  ) {
+    normalized.breakdown_steps = [
+      ...(normalized.breakdown_steps || []),
+      { step: normalized.step, explanation: normalized.explanation },
+    ];
+    delete normalized.step;
+    delete normalized.explanation;
+  }
+
   if (Array.isArray(normalized && normalized.breakdown_steps)) {
     normalized.breakdown_steps = normalized.breakdown_steps.map((step) =>
       normalizeKnownKeys(step, {

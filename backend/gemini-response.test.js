@@ -158,3 +158,42 @@ test('normalizes known aliases and wrappers to the frontend response shape', () 
   assert.equal(normalized.breakdown_steps[0].step, 'First');
   assert.equal(normalized.quiz[0].correctAnswer, 'A');
 });
+
+test('appends a root-level step only when it completes the four-step breakdown', () => {
+  const parsed = {
+    analogy: 'A toolbox',
+    breakdown_steps: [
+      { step: 'First', explanation: 'One' },
+      { step: 'Second', explanation: 'Two' },
+      { step: 'Third', explanation: 'Three' },
+    ],
+    step: 'Fourth',
+    explanation: 'Four',
+    quiz: [
+      {
+        question: 'Which tool?',
+        options: ['A', 'B', 'C', 'D'],
+        correctAnswer: 'A',
+        explanation: 'A is the right choice.',
+      },
+    ],
+  };
+  const normalized = normalizeGeminiAnalysis(parsed);
+
+  assert.equal(validateGeminiAnalysis(normalized), normalized);
+  assert.equal(normalized.breakdown_steps[3].step, 'Fourth');
+  assert.equal(Object.hasOwn(normalized, 'step'), false);
+});
+
+test('does not invent missing steps or a quiz for a flattened response', () => {
+  const normalized = normalizeGeminiAnalysis({
+    analogy: 'A toolbox',
+    step: 'Overview',
+    explanation: 'A short description.',
+  });
+
+  assert.throws(
+    () => validateGeminiAnalysis(normalized),
+    /invalid: breakdown_steps, quiz/
+  );
+});
