@@ -1,6 +1,6 @@
-function createGeminiResponseFormatError(message) {
+function createAnalysisResponseFormatError(message) {
   const error = new Error(message);
-  error.code = 'GEMINI_RESPONSE_FORMAT';
+  error.code = 'ANALYSIS_RESPONSE_FORMAT';
   return error;
 }
 
@@ -21,9 +21,9 @@ function describeResponseFormat(rawText) {
   return `response kind: ${kind}, length: ${rawText.length} characters`;
 }
 
-function parseGeminiResponse(rawText) {
+function parseAnalysisResponse(rawText) {
   if (typeof rawText !== 'string' || rawText.trim() === '') {
-    throw createGeminiResponseFormatError('Gemini returned an empty response.');
+    throw createAnalysisResponseFormatError('Runware returned an empty response.');
   }
 
   let bestCandidate;
@@ -64,7 +64,7 @@ function parseGeminiResponse(rawText) {
             break;
           }
 
-          const candidate = normalizeGeminiAnalysis(parsedCandidate);
+          const candidate = normalizeAnalysis(parsedCandidate);
           const score = ['analogy', 'breakdown_steps', 'quiz'].filter(
             (field) => candidate && candidate[field] !== undefined
           ).length;
@@ -76,9 +76,9 @@ function parseGeminiResponse(rawText) {
 
           if (score === 3) {
             try {
-              return validateGeminiAnalysis(candidate);
+              return validateAnalysis(candidate);
             } catch (error) {
-              if (error.code !== 'GEMINI_RESPONSE_FORMAT') throw error;
+              if (error.code !== 'ANALYSIS_RESPONSE_FORMAT') throw error;
             }
           }
           break;
@@ -89,8 +89,8 @@ function parseGeminiResponse(rawText) {
 
   if (bestCandidate !== undefined) return bestCandidate;
 
-  throw createGeminiResponseFormatError(
-    `Gemini returned analysis data in an unexpected format (${describeResponseFormat(rawText)}).`
+  throw createAnalysisResponseFormatError(
+    `Runware returned analysis data in an unexpected format (${describeResponseFormat(rawText)}).`
   );
 }
 
@@ -113,7 +113,7 @@ function normalizeKnownKeys(value, aliases) {
   return normalized;
 }
 
-function normalizeGeminiAnalysis(parsedData) {
+function normalizeAnalysis(parsedData) {
   let source = parsedData;
 
   for (let depth = 0; depth < 3 && isRecord(source); depth += 1) {
@@ -189,7 +189,7 @@ function describeShape(value) {
   return typeof value;
 }
 
-function validateGeminiAnalysis(parsedData) {
+function validateAnalysis(parsedData) {
   const invalidFields = [];
   const hasOnlyKeys = (value, allowedKeys) =>
     isRecord(value) && Object.keys(value).every((key) => allowedKeys.includes(key));
@@ -249,45 +249,46 @@ function validateGeminiAnalysis(parsedData) {
     const fieldShapes = ['analogy', 'breakdown_steps', 'quiz']
       .map((field) => `${field}=${describeShape(parsedData && parsedData[field])}`)
       .join(', ');
-    throw createGeminiResponseFormatError(
-      `Gemini returned analysis data in an unexpected format (invalid: ${invalidFields.join(', ')}; keys: ${availableKeys}; shapes: ${fieldShapes}).`
+    throw createAnalysisResponseFormatError(
+      `Runware returned analysis data in an unexpected format (invalid: ${invalidFields.join(', ')}; keys: ${availableKeys}; shapes: ${fieldShapes}).`
     );
   }
 
   return parsedData;
 }
 
-async function generateValidatedGeminiAnalysis(
+async function generateValidatedAnalysis(
   generateResponse,
   wait = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 ) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const rawText = await generateResponse();
-      return validateGeminiAnalysis(
-        normalizeGeminiAnalysis(parseGeminiResponse(rawText))
+      return validateAnalysis(
+        normalizeAnalysis(parseAnalysisResponse(rawText))
       );
     } catch (error) {
+      const status = error.status || (error.response && error.response.status);
       if (
         attempt > 0 ||
-        (error.code !== 'GEMINI_RESPONSE_FORMAT' && error.status !== 503)
+        (error.code !== 'ANALYSIS_RESPONSE_FORMAT' && status !== 503)
       ) {
         throw error;
       }
 
-      if (error.status === 503) {
-        console.warn('Gemini is temporarily unavailable; retrying once.');
+      if (status === 503) {
+        console.warn('Runware is temporarily unavailable; retrying once.');
         await wait(1000);
       } else {
-        console.warn('Gemini returned an invalid response; retrying once.');
+        console.warn('Runware returned an invalid response; retrying once.');
       }
     }
   }
 }
 
 module.exports = {
-  generateValidatedGeminiAnalysis,
-  normalizeGeminiAnalysis,
-  parseGeminiResponse,
-  validateGeminiAnalysis,
+  generateValidatedAnalysis,
+  normalizeAnalysis,
+  parseAnalysisResponse,
+  validateAnalysis,
 };

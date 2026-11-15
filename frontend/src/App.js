@@ -110,7 +110,7 @@ function App() {
             />
           </div>
           <button type="submit" disabled={loading}>
-            {loading ? 'Analyzing with Gemini...' : 'Generate Breakdown'}
+            {loading ? 'Analyzing...' : 'Generate Breakdown'}
           </button>
         </form>
 

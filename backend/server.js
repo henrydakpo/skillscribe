@@ -2,82 +2,30 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const { GoogleGenAI, Type } = require('@google/genai');
+const OpenAI = require('openai');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
-const { generateValidatedGeminiAnalysis } = require('./gemini-response');
+const { generateValidatedAnalysis } = require('./analysis-response');
 
 const app = express();
 const port = process.env.PORT || 5000;
-const apiKey = process.env.GEMINI_API_KEY;
+const runwareApiKey = process.env.RUNWARE_API_KEY;
 const jwtSecret = process.env.JWT_SECRET;
 const pool = process.env.DATABASE_URL
   ? new Pool({ connectionString: process.env.DATABASE_URL })
   : null;
 
-if (!apiKey) {
-  throw new Error('GEMINI_API_KEY is required to start the SkillScribe backend.');
+if (!runwareApiKey) {
+  throw new Error('RUNWARE_API_KEY is required to start the SkillScribe backend.');
 }
 
-const ai = new GoogleGenAI({ apiKey });
-const analysisGenerationConfig = {
-  systemInstruction: `
-You are SkillScribe's technical educator.
-Return exactly one JSON object matching the supplied response schema:
-- breakdown_steps contains 2 to 4 objects with step and explanation strings
-- quiz is an array containing exactly 1 quiz object
-Never replace the requested analysis with a title/description summary.
-  `.trim(),
-  maxOutputTokens: 1024,
-  temperature: 0.2,
-  responseMimeType: 'application/json',
-  responseSchema: {
-    type: Type.OBJECT,
-    properties: {
-      analogy: { type: Type.STRING },
-      breakdown_steps: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            step: { type: Type.STRING },
-            explanation: { type: Type.STRING },
-          },
-          required: ['step', 'explanation'],
-        },
-        minItems: 2,
-        maxItems: 4,
-      },
-      quiz: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            question: { type: Type.STRING },
-            options: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              minItems: 4,
-              maxItems: 4,
-            },
-            correctAnswer: { type: Type.STRING },
-            explanation: { type: Type.STRING },
-          },
-          required: [
-            'question',
-            'options',
-            'correctAnswer',
-            'explanation',
-          ],
-        },
-        minItems: 1,
-        maxItems: 1,
-      },
-    },
-    required: ['analogy', 'breakdown_steps', 'quiz'],
-  },
-};
+const runwareClient = new OpenAI({
+  apiKey: runwareApiKey,
+  baseURL: 'https://api.runware.ai/v1',
+  maxRetries: 0,
+});
+const runwareModel = 'openai:gpt@5.5';
 
 app.use(cors());
 app.use(express.json());
@@ -228,44 +176,54 @@ Target audience:
 ${targetAudience.trim()}
 """
 
-Return exactly one JSON object matching the supplied response schema, with no additional keys or surrounding text.
+Return exactly one JSON object with the required analysis fields, without additional keys or surrounding text.
 `;
 
   try {
-  const parsedData = await generateValidatedGeminiAnalysis(async () => {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: prompt,
-      config: analysisGenerationConfig,
+    const parsedData = await generateValidatedAnalysis(async () => {
+      const response = await runwareClient.chat.completions.create({
+        model: runwareModel,
+        messages: [
+          {
+            role: 'system',
+            content: `You are SkillScribe's technical educator. Return only a JSON object with exactly three root keys: analogy (string), breakdown_steps (2 to 4 objects with step and explanation strings), and quiz (an array containing exactly one object with question, four options, correctAnswer matching one option, and explanation).`,
+          },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+        max_completion_tokens: 1024,
       });
 
-    return response.text;
-  });
+      const choice = response.choices && response.choices[0];
+      return choice && choice.message ? choice.message.content : null;
+    });
 
-  res.json({
-    success: true,
-    data: parsedData,
-  });
+    res.json({ success: true, data: parsedData });
   } catch (error) {
-    if (error.code === 'GEMINI_RESPONSE_FORMAT') {
-      console.error('Gemini response validation failed:', error.message);
+    if (error.code === 'ANALYSIS_RESPONSE_FORMAT') {
+      console.error('Runware response validation failed:', error.message);
       return res.status(502).json({
         success: false,
-        error: 'Gemini returned an unusable response. Please try again.',
+        error: 'Runware returned an unusable response. Please try again.',
       });
     }
 
-    console.error('Error processing breakdown with Gemini:', error);
-    if (error.status === 503) {
+    const upstreamStatus =
+      error.status || (error.response && error.response.status);
+    console.error('Runware analysis request failed:', {
+      status: upstreamStatus || null,
+      code: error.code || 'UNKNOWN',
+    });
+    if (upstreamStatus === 503) {
       return res.status(503).json({
         success: false,
-        error: 'Gemini is temporarily experiencing high demand. Please try again shortly.',
+        error: 'Runware is temporarily unavailable. Please try again shortly.',
       });
     }
 
-    res.status(500).json({
+    res.status(upstreamStatus ? 502 : 500).json({
       success: false,
-      error: 'Failed to process the analysis request. Please verify your API key and input.',
+      error: 'Failed to process the analysis request. Please try again.',
     });
   }
 });
