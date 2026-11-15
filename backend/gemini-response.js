@@ -5,6 +5,9 @@ function createGeminiResponseFormatError(message) {
 }
 
 function parseGeminiResponse(rawText) {
+  let bestCandidate;
+  let bestCandidateScore = -1;
+
   for (let start = 0; start < rawText.length; start += 1) {
     if (rawText[start] !== '{') continue;
 
@@ -33,15 +36,37 @@ function parseGeminiResponse(rawText) {
       } else if (character === '}') {
         depth -= 1;
         if (depth === 0) {
+          let parsedCandidate;
           try {
-            return JSON.parse(rawText.slice(start, end + 1));
+            parsedCandidate = JSON.parse(rawText.slice(start, end + 1));
           } catch {
             break;
           }
+
+          const candidate = normalizeGeminiAnalysis(parsedCandidate);
+          const score = ['analogy', 'breakdown_steps', 'quiz'].filter(
+            (field) => candidate && candidate[field] !== undefined
+          ).length;
+
+          if (score > bestCandidateScore) {
+            bestCandidate = candidate;
+            bestCandidateScore = score;
+          }
+
+          if (score === 3) {
+            try {
+              return validateGeminiAnalysis(candidate);
+            } catch (error) {
+              if (error.code !== 'GEMINI_RESPONSE_FORMAT') throw error;
+            }
+          }
+          break;
         }
       }
     }
   }
+
+  if (bestCandidate !== undefined) return bestCandidate;
 
   throw createGeminiResponseFormatError(
     'Gemini returned analysis data in an unexpected format.'

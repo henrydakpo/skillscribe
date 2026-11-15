@@ -26,6 +26,26 @@ test('parses fenced JSON and ignores braces inside JSON strings', () => {
   );
 });
 
+test('prefers a complete analysis over a nested title/description object', () => {
+  const expected = {
+    analogy: 'A toolbox',
+    breakdown_steps: [
+      { title: 'First', description: 'One' },
+      { title: 'Second', description: 'Two' },
+      { title: 'Third', description: 'Three' },
+    ],
+    quiz: {
+      question: 'Which tool?',
+      options: ['A', 'B', 'C', 'D'],
+      correct_answer: 'A',
+    },
+  };
+  const rawText = `Malformed wrapper: {"step":{"title":"First","description":"One"} trailing text
+${JSON.stringify(expected)}`;
+
+  assert.deepEqual(parseGeminiResponse(rawText), expected);
+});
+
 test('rejects text that contains no valid JSON object', () => {
   assert.throws(
     () => parseGeminiResponse('The result is not available.'),
@@ -55,6 +75,17 @@ test('reports which expected fields have an invalid shape', () => {
   assert.throws(
     () => validateGeminiAnalysis({ analogy: 'A toolbox', breakdown_steps: [] }),
     /invalid: breakdown_steps, quiz/
+  );
+});
+
+test('does not turn a title/description object into fabricated quiz data', () => {
+  const parsed = parseGeminiResponse(
+    JSON.stringify({ title: 'Overview', description: 'A short explanation.' })
+  );
+
+  assert.throws(
+    () => validateGeminiAnalysis(parsed),
+    /invalid: analogy, breakdown_steps, quiz/
   );
 });
 
