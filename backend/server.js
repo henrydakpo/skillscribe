@@ -6,11 +6,7 @@ const { GoogleGenAI, Type } = require('@google/genai');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
-const {
-  normalizeGeminiAnalysis,
-  parseGeminiResponse,
-  validateGeminiAnalysis,
-} = require('./gemini-response');
+const { generateValidatedGeminiAnalysis } = require('./gemini-response');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -19,13 +15,69 @@ const jwtSecret = process.env.JWT_SECRET;
 const pool = process.env.DATABASE_URL
   ? new Pool({ connectionString: process.env.DATABASE_URL })
   : null;
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 if (!apiKey) {
   throw new Error('GEMINI_API_KEY is required to start the SkillScribe backend.');
 }
 
 const ai = new GoogleGenAI({ apiKey });
+const analysisGenerationConfig = {
+  systemInstruction: `
+You are SkillScribe's technical educator.
+Return exactly one JSON object matching the supplied response schema:
+- breakdown_steps contains 2 to 4 objects with step and explanation strings
+- quiz is an array containing exactly 1 quiz object
+Never replace the requested analysis with a title/description summary.
+  `.trim(),
+  maxOutputTokens: 1024,
+  temperature: 0.2,
+  responseMimeType: 'application/json',
+  responseSchema: {
+    type: Type.OBJECT,
+    properties: {
+      analogy: { type: Type.STRING },
+      breakdown_steps: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            step: { type: Type.STRING },
+            explanation: { type: Type.STRING },
+          },
+          required: ['step', 'explanation'],
+        },
+        minItems: 2,
+        maxItems: 4,
+      },
+      quiz: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            question: { type: Type.STRING },
+            options: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              minItems: 4,
+              maxItems: 4,
+            },
+            correctAnswer: { type: Type.STRING },
+            explanation: { type: Type.STRING },
+          },
+          required: [
+            'question',
+            'options',
+            'correctAnswer',
+            'explanation',
+          ],
+        },
+        minItems: 1,
+        maxItems: 1,
+      },
+    },
+    required: ['analogy', 'breakdown_steps', 'quiz'],
+  },
+};
 
 app.use(cors());
 app.use(express.json());
@@ -180,97 +232,20 @@ Return exactly one JSON object matching the supplied response schema, with no ad
 `;
 
   try {
-  let response;
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      response = await ai.models.generateContent({
+  const parsedData = await generateValidatedGeminiAnalysis(async () => {
+      const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: prompt,
-        config: {
-          systemInstruction: `
-You are SkillScribe's technical educator.
-Return exactly one JSON object matching the supplied response schema:
-- breakdown_steps contains exactly 4 objects with step and explanation strings
-- quiz is an array containing exactly 1 quiz object
-Never replace the requested analysis with a title/description summary.
-          `.trim(),
-          maxOutputTokens: 1024,
-          temperature: 0.2,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              analogy: { type: Type.STRING },
-              breakdown_steps: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    step: { type: Type.STRING },
-                    explanation: { type: Type.STRING },
-                  },
-                  required: ['step', 'explanation'],
-                },
-                minItems: 4,
-                maxItems: 4,
-              },
-              quiz: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    question: { type: Type.STRING },
-                    options: {
-                      type: Type.ARRAY,
-                      items: { type: Type.STRING },
-                      minItems: 4,
-                      maxItems: 4,
-                    },
-                    correctAnswer: { type: Type.STRING },
-                    explanation: { type: Type.STRING },
-                  },
-                  required: [
-                    'question',
-                    'options',
-                    'correctAnswer',
-                    'explanation',
-                  ],
-                },
-                minItems: 1,
-                maxItems: 1,
-              },
-            },
-            required: ['analogy', 'breakdown_steps', 'quiz'],
-          },
-        },
+      config: analysisGenerationConfig,
       });
-      break;
-    } catch (error) {
-      if (error.status !== 503 || attempt >= 2) {
-        throw error;
-      }
 
-      const delay = 1000 * 2 ** attempt;
-      console.warn(
-        `Gemini is temporarily unavailable; retrying in ${delay}ms.`
-      );
-      await sleep(delay);
-    }
-    }
+    return response.text;
+  });
 
-    const rawText = response.text;
-    if (typeof rawText !== 'string' || rawText.trim() === '') {
-      throw new Error('Gemini returned an empty response.');
-    }
-
-    const parsedData = validateGeminiAnalysis(
-      normalizeGeminiAnalysis(parseGeminiResponse(rawText))
-    );
-
-    res.json({
-      success: true,
-      data: parsedData,
-    });
+  res.json({
+    success: true,
+    data: parsedData,
+  });
   } catch (error) {
     if (error.code === 'GEMINI_RESPONSE_FORMAT') {
       console.error('Gemini response validation failed:', error.message);

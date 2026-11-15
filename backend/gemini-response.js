@@ -22,6 +22,10 @@ function describeResponseFormat(rawText) {
 }
 
 function parseGeminiResponse(rawText) {
+  if (typeof rawText !== 'string' || rawText.trim() === '') {
+    throw createGeminiResponseFormatError('Gemini returned an empty response.');
+  }
+
   let bestCandidate;
   let bestCandidateScore = -1;
 
@@ -137,7 +141,8 @@ function normalizeGeminiAnalysis(parsedData) {
     typeof normalized.step === 'string' &&
     typeof normalized.explanation === 'string' &&
     (!Array.isArray(normalized.breakdown_steps) ||
-      normalized.breakdown_steps.length === 3)
+      (normalized.breakdown_steps.length >= 1 &&
+        normalized.breakdown_steps.length < 4))
   ) {
     normalized.breakdown_steps = [
       ...(normalized.breakdown_steps || []),
@@ -199,7 +204,8 @@ function validateGeminiAnalysis(parsedData) {
 
   if (
     !Array.isArray(parsedData && parsedData.breakdown_steps) ||
-    parsedData.breakdown_steps.length !== 4 ||
+    parsedData.breakdown_steps.length < 2 ||
+    parsedData.breakdown_steps.length > 4 ||
     !parsedData.breakdown_steps.every(
       (step) =>
         step &&
@@ -251,7 +257,36 @@ function validateGeminiAnalysis(parsedData) {
   return parsedData;
 }
 
+async function generateValidatedGeminiAnalysis(
+  generateResponse,
+  wait = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
+) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const rawText = await generateResponse();
+      return validateGeminiAnalysis(
+        normalizeGeminiAnalysis(parseGeminiResponse(rawText))
+      );
+    } catch (error) {
+      if (
+        attempt > 0 ||
+        (error.code !== 'GEMINI_RESPONSE_FORMAT' && error.status !== 503)
+      ) {
+        throw error;
+      }
+
+      if (error.status === 503) {
+        console.warn('Gemini is temporarily unavailable; retrying once.');
+        await wait(1000);
+      } else {
+        console.warn('Gemini returned an invalid response; retrying once.');
+      }
+    }
+  }
+}
+
 module.exports = {
+  generateValidatedGeminiAnalysis,
   normalizeGeminiAnalysis,
   parseGeminiResponse,
   validateGeminiAnalysis,
