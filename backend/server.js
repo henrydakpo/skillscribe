@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const {
+  normalizeGeminiAnalysis,
   parseGeminiResponse,
   validateGeminiAnalysis,
 } = require('./gemini-response');
@@ -241,7 +242,9 @@ Return pure JSON without any extra text or conversational filler.
       throw new Error('Gemini returned an empty response.');
     }
 
-    const parsedData = validateGeminiAnalysis(parseGeminiResponse(rawText));
+    const parsedData = validateGeminiAnalysis(
+      normalizeGeminiAnalysis(parseGeminiResponse(rawText))
+    );
 
     res.json({
       success: true,

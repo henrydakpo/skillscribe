@@ -48,6 +48,79 @@ function parseGeminiResponse(rawText) {
   );
 }
 
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeKnownKeys(value, aliases) {
+  if (!isRecord(value)) return value;
+
+  const normalized = { ...value };
+  for (const [key, fieldValue] of Object.entries(value)) {
+    const compactKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const canonicalKey = aliases[compactKey];
+    if (canonicalKey && normalized[canonicalKey] === undefined) {
+      normalized[canonicalKey] = fieldValue;
+    }
+  }
+
+  return normalized;
+}
+
+function normalizeGeminiAnalysis(parsedData) {
+  let source = parsedData;
+
+  for (let depth = 0; depth < 3 && isRecord(source); depth += 1) {
+    const wrapped = ['analysis', 'result', 'data'].find((key) =>
+      isRecord(source[key])
+    );
+    if (!wrapped) break;
+    source = source[wrapped];
+  }
+
+  const normalized = normalizeKnownKeys(source, {
+    analogy: 'analogy',
+    analogytext: 'analogy',
+    realworldanalogy: 'analogy',
+    breakdownsteps: 'breakdown_steps',
+    breakdown: 'breakdown_steps',
+    steps: 'breakdown_steps',
+    stepbystepbreakdown: 'breakdown_steps',
+    quiz: 'quiz',
+    quizquestions: 'quiz',
+    codesnippet: 'code_snippet',
+  });
+
+  if (Array.isArray(normalized && normalized.breakdown_steps)) {
+    normalized.breakdown_steps = normalized.breakdown_steps.map((step) =>
+      normalizeKnownKeys(step, {
+        title: 'title',
+        step: 'title',
+        description: 'description',
+        explanation: 'description',
+      })
+    );
+  }
+
+  if (isRecord(normalized && normalized.quiz)) {
+    normalized.quiz = normalizeKnownKeys(normalized.quiz, {
+      question: 'question',
+      options: 'options',
+      choices: 'options',
+      correctanswer: 'correct_answer',
+    });
+  }
+
+  return normalized;
+}
+
+function describeShape(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return `array(${value.length})`;
+  if (isRecord(value)) return `object(${Object.keys(value).join(', ')})`;
+  return typeof value;
+}
+
 function validateGeminiAnalysis(parsedData) {
   const invalidFields = [];
 
@@ -81,12 +154,22 @@ function validateGeminiAnalysis(parsedData) {
   }
 
   if (invalidFields.length > 0) {
+    const availableKeys = isRecord(parsedData)
+      ? Object.keys(parsedData).join(', ')
+      : '(none)';
+    const fieldShapes = ['analogy', 'breakdown_steps', 'quiz']
+      .map((field) => `${field}=${describeShape(parsedData && parsedData[field])}`)
+      .join(', ');
     throw createGeminiResponseFormatError(
-      `Gemini returned analysis data in an unexpected format (invalid: ${invalidFields.join(', ')}).`
+      `Gemini returned analysis data in an unexpected format (invalid: ${invalidFields.join(', ')}; keys: ${availableKeys}; shapes: ${fieldShapes}).`
     );
   }
 
   return parsedData;
 }
 
-module.exports = { parseGeminiResponse, validateGeminiAnalysis };
+module.exports = {
+  normalizeGeminiAnalysis,
+  parseGeminiResponse,
+  validateGeminiAnalysis,
+};

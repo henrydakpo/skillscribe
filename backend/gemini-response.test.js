@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
+  normalizeGeminiAnalysis,
   parseGeminiResponse,
   validateGeminiAnalysis,
 } = require('./gemini-response');
@@ -55,4 +56,28 @@ test('reports which expected fields have an invalid shape', () => {
     () => validateGeminiAnalysis({ analogy: 'A toolbox', breakdown_steps: [] }),
     /invalid: breakdown_steps, quiz/
   );
+});
+
+test('normalizes known aliases and wrappers to the frontend response shape', () => {
+  const parsed = {
+    result: {
+      analogyText: 'A toolbox',
+      breakdown: [
+        { step: 'First', explanation: 'One' },
+        { title: 'Second', description: 'Two' },
+        { title: 'Third', description: 'Three' },
+      ],
+      quiz: {
+        question: 'Which tool?',
+        choices: ['A', 'B', 'C', 'D'],
+        correctAnswer: 'A',
+      },
+    },
+  };
+  const normalized = normalizeGeminiAnalysis(parsed);
+
+  assert.equal(validateGeminiAnalysis(normalized), normalized);
+  assert.equal(normalized.analogy, 'A toolbox');
+  assert.equal(normalized.breakdown_steps[0].title, 'First');
+  assert.equal(normalized.quiz.correct_answer, 'A');
 });
