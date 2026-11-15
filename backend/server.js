@@ -155,6 +155,7 @@ app.post('/api/analyze', async (req, res) => {
   const prompt = `
 You are an expert interactive micro-mentor and visual explainer for SkillScribe.
 Analyze the following text, code, or concept provided by the user and break it down clearly.
+Keep explanations concise, direct, and focused on the key idea.
 
 User Input:
 """
@@ -177,6 +178,10 @@ Return pure JSON without any extra text or conversational filler.
       response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: prompt,
+        config: {
+          maxOutputTokens: 1024,
+          temperature: 0.3,
+        },
       });
       break;
     } catch (error) {
