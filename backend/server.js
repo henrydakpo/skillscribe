@@ -6,6 +6,7 @@ const { GoogleGenAI } = require('@google/genai');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
+const { parseGeminiResponse } = require('./gemini-response');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -196,11 +197,7 @@ Return pure JSON without any extra text or conversational filler.
       throw new Error('Gemini returned an empty response.');
     }
 
-    const cleanedText = rawText
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/, '')
-      .trim();
-    const parsedData = JSON.parse(cleanedText);
+    const parsedData = parseGeminiResponse(rawText);
 
     if (
       !parsedData ||
