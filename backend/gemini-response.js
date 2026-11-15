@@ -4,6 +4,23 @@ function createGeminiResponseFormatError(message) {
   return error;
 }
 
+function describeResponseFormat(rawText) {
+  const text = rawText.trimStart();
+  let kind = 'text';
+
+  if (!text) {
+    kind = 'empty';
+  } else if (text.startsWith('```')) {
+    kind = 'markdown';
+  } else if (/^<(?:!doctype\s+html|html\b)/i.test(text)) {
+    kind = 'html';
+  } else if (text.startsWith('{') || text.startsWith('[')) {
+    kind = 'json-like';
+  }
+
+  return `response kind: ${kind}, length: ${rawText.length} characters`;
+}
+
 function parseGeminiResponse(rawText) {
   let bestCandidate;
   let bestCandidateScore = -1;
@@ -69,7 +86,7 @@ function parseGeminiResponse(rawText) {
   if (bestCandidate !== undefined) return bestCandidate;
 
   throw createGeminiResponseFormatError(
-    'Gemini returned analysis data in an unexpected format.'
+    `Gemini returned analysis data in an unexpected format (${describeResponseFormat(rawText)}).`
   );
 }
 

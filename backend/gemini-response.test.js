@@ -53,6 +53,19 @@ test('rejects text that contains no valid JSON object', () => {
   );
 });
 
+test('describes invalid responses without logging their contents', () => {
+  const rawText = '<!doctype html><p>private response</p>';
+
+  assert.throws(
+    () => parseGeminiResponse(rawText),
+    (error) =>
+      error.code === 'GEMINI_RESPONSE_FORMAT' &&
+      error.message.includes('response kind: html') &&
+      error.message.includes(`length: ${rawText.length} characters`) &&
+      !error.message.includes('private response')
+  );
+});
+
 test('validates the analysis shape expected by the frontend', () => {
   const expected = {
     analogy: 'A toolbox',
