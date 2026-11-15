@@ -1,3 +1,9 @@
+function createGeminiResponseFormatError(message) {
+  const error = new Error(message);
+  error.code = 'GEMINI_RESPONSE_FORMAT';
+  return error;
+}
+
 function parseGeminiResponse(rawText) {
   for (let start = 0; start < rawText.length; start += 1) {
     if (rawText[start] !== '{') continue;
@@ -37,7 +43,50 @@ function parseGeminiResponse(rawText) {
     }
   }
 
-  throw new Error('Gemini returned analysis data in an unexpected format.');
+  throw createGeminiResponseFormatError(
+    'Gemini returned analysis data in an unexpected format.'
+  );
 }
 
-module.exports = { parseGeminiResponse };
+function validateGeminiAnalysis(parsedData) {
+  const invalidFields = [];
+
+  if (!parsedData || typeof parsedData.analogy !== 'string') {
+    invalidFields.push('analogy');
+  }
+
+  if (
+    !Array.isArray(parsedData && parsedData.breakdown_steps) ||
+    parsedData.breakdown_steps.length !== 3 ||
+    !parsedData.breakdown_steps.every(
+      (step) =>
+        step &&
+        typeof step.title === 'string' &&
+        typeof step.description === 'string'
+    )
+  ) {
+    invalidFields.push('breakdown_steps');
+  }
+
+  if (
+    !parsedData ||
+    !parsedData.quiz ||
+    typeof parsedData.quiz.question !== 'string' ||
+    !Array.isArray(parsedData.quiz.options) ||
+    parsedData.quiz.options.length !== 4 ||
+    !parsedData.quiz.options.every((option) => typeof option === 'string') ||
+    typeof parsedData.quiz.correct_answer !== 'string'
+  ) {
+    invalidFields.push('quiz');
+  }
+
+  if (invalidFields.length > 0) {
+    throw createGeminiResponseFormatError(
+      `Gemini returned analysis data in an unexpected format (invalid: ${invalidFields.join(', ')}).`
+    );
+  }
+
+  return parsedData;
+}
+
+module.exports = { parseGeminiResponse, validateGeminiAnalysis };

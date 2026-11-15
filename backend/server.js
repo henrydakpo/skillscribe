@@ -2,11 +2,14 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const { GoogleGenAI } = require('@google/genai');
+const { GoogleGenAI, Type } = require('@google/genai');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
-const { parseGeminiResponse } = require('./gemini-response');
+const {
+  parseGeminiResponse,
+  validateGeminiAnalysis,
+} = require('./gemini-response');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -181,6 +184,42 @@ Return pure JSON without any extra text or conversational filler.
         config: {
           maxOutputTokens: 1024,
           temperature: 0.3,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              analogy: { type: Type.STRING },
+              breakdown_steps: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                  },
+                  required: ['title', 'description'],
+                },
+                minItems: 3,
+                maxItems: 3,
+              },
+              quiz: {
+                type: Type.OBJECT,
+                properties: {
+                  question: { type: Type.STRING },
+                  options: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    minItems: 4,
+                    maxItems: 4,
+                  },
+                  correct_answer: { type: Type.STRING },
+                },
+                required: ['question', 'options', 'correct_answer'],
+              },
+              code_snippet: { type: Type.STRING, nullable: true },
+            },
+            required: ['analogy', 'breakdown_steps', 'quiz', 'code_snippet'],
+          },
         },
       });
       break;
@@ -202,34 +241,21 @@ Return pure JSON without any extra text or conversational filler.
       throw new Error('Gemini returned an empty response.');
     }
 
-    const parsedData = parseGeminiResponse(rawText);
-
-    if (
-      !parsedData ||
-      typeof parsedData.analogy !== 'string' ||
-      !Array.isArray(parsedData.breakdown_steps) ||
-      parsedData.breakdown_steps.length !== 3 ||
-      !parsedData.breakdown_steps.every(
-        (step) =>
-          step &&
-          typeof step.title === 'string' &&
-          typeof step.description === 'string'
-      ) ||
-      !parsedData.quiz ||
-      typeof parsedData.quiz.question !== 'string' ||
-      !Array.isArray(parsedData.quiz.options) ||
-      parsedData.quiz.options.length !== 4 ||
-      !parsedData.quiz.options.every((option) => typeof option === 'string') ||
-      typeof parsedData.quiz.correct_answer !== 'string'
-    ) {
-      throw new Error('Gemini returned analysis data in an unexpected format.');
-    }
+    const parsedData = validateGeminiAnalysis(parseGeminiResponse(rawText));
 
     res.json({
       success: true,
       data: parsedData,
     });
   } catch (error) {
+    if (error.code === 'GEMINI_RESPONSE_FORMAT') {
+      console.error('Gemini response validation failed:', error.message);
+      return res.status(502).json({
+        success: false,
+        error: 'Gemini returned an unusable response. Please try again.',
+      });
+    }
+
     console.error('Error processing breakdown with Gemini:', error);
     if (error.status === 503) {
       return res.status(503).json({
