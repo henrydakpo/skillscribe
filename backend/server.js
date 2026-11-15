@@ -183,8 +183,17 @@ Return pure JSON without any extra text or conversational filler.
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
+          systemInstruction: `
+You are SkillScribe's technical educator.
+Return exactly one JSON object matching the supplied response schema:
+- analogy: a concise explanation using a real-world comparison
+- breakdown_steps: exactly 3 items, each with title and description
+- quiz: one object with question, 4 options, and correct_answer
+- code_snippet: a short relevant snippet or null
+Never replace the requested analysis with a title/description summary.
+          `.trim(),
           maxOutputTokens: 1024,
-          temperature: 0.3,
+          temperature: 0.2,
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
