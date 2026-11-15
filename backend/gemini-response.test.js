@@ -30,15 +30,19 @@ test('prefers a complete analysis over a nested title/description object', () =>
   const expected = {
     analogy: 'A toolbox',
     breakdown_steps: [
-      { title: 'First', description: 'One' },
-      { title: 'Second', description: 'Two' },
-      { title: 'Third', description: 'Three' },
+      { step: 'First', explanation: 'One' },
+      { step: 'Second', explanation: 'Two' },
+      { step: 'Third', explanation: 'Three' },
+      { step: 'Fourth', explanation: 'Four' },
     ],
-    quiz: {
-      question: 'Which tool?',
-      options: ['A', 'B', 'C', 'D'],
-      correct_answer: 'A',
-    },
+    quiz: [
+      {
+        question: 'Which tool?',
+        options: ['A', 'B', 'C', 'D'],
+        correctAnswer: 'A',
+        explanation: 'A is the right choice.',
+      },
+    ],
   };
   const rawText = `Malformed wrapper: {"step":{"title":"First","description":"One"} trailing text
 ${JSON.stringify(expected)}`;
@@ -70,15 +74,19 @@ test('validates the analysis shape expected by the frontend', () => {
   const expected = {
     analogy: 'A toolbox',
     breakdown_steps: [
-      { title: 'First', description: 'One' },
-      { title: 'Second', description: 'Two' },
-      { title: 'Third', description: 'Three' },
+      { step: 'First', explanation: 'One' },
+      { step: 'Second', explanation: 'Two' },
+      { step: 'Third', explanation: 'Three' },
+      { step: 'Fourth', explanation: 'Four' },
     ],
-    quiz: {
-      question: 'Which tool?',
-      options: ['A', 'B', 'C', 'D'],
-      correct_answer: 'A',
-    },
+    quiz: [
+      {
+        question: 'Which tool?',
+        options: ['A', 'B', 'C', 'D'],
+        correctAnswer: 'A',
+        explanation: 'A is the right choice.',
+      },
+    ],
   };
 
   assert.deepEqual(validateGeminiAnalysis(expected), expected);
@@ -91,6 +99,29 @@ test('reports which expected fields have an invalid shape', () => {
   );
 });
 
+test('rejects keys outside the supplied response contract', () => {
+  const analysis = {
+    analogy: 'A toolbox',
+    breakdown_steps: [
+      { step: 'First', explanation: 'One' },
+      { step: 'Second', explanation: 'Two' },
+      { step: 'Third', explanation: 'Three' },
+      { step: 'Fourth', explanation: 'Four' },
+    ],
+    quiz: [
+      {
+        question: 'Which tool?',
+        options: ['A', 'B', 'C', 'D'],
+        correctAnswer: 'A',
+        explanation: 'A is the right choice.',
+      },
+    ],
+    extra: 'unexpected',
+  };
+
+  assert.throws(() => validateGeminiAnalysis(analysis), /invalid: keys/);
+});
+
 test('does not turn a title/description object into fabricated quiz data', () => {
   const parsed = parseGeminiResponse(
     JSON.stringify({ title: 'Overview', description: 'A short explanation.' })
@@ -98,7 +129,7 @@ test('does not turn a title/description object into fabricated quiz data', () =>
 
   assert.throws(
     () => validateGeminiAnalysis(parsed),
-    /invalid: analogy, breakdown_steps, quiz/
+    /invalid: keys, analogy, breakdown_steps, quiz/
   );
 });
 
@@ -109,12 +140,14 @@ test('normalizes known aliases and wrappers to the frontend response shape', () 
       breakdown: [
         { step: 'First', explanation: 'One' },
         { title: 'Second', description: 'Two' },
-        { title: 'Third', description: 'Three' },
+        { step: 'Third', explanation: 'Three' },
+        { title: 'Fourth', description: 'Four' },
       ],
       quiz: {
         question: 'Which tool?',
         choices: ['A', 'B', 'C', 'D'],
         correctAnswer: 'A',
+        explanation: 'A is the right choice.',
       },
     },
   };
@@ -122,6 +155,6 @@ test('normalizes known aliases and wrappers to the frontend response shape', () 
 
   assert.equal(validateGeminiAnalysis(normalized), normalized);
   assert.equal(normalized.analogy, 'A toolbox');
-  assert.equal(normalized.breakdown_steps[0].title, 'First');
-  assert.equal(normalized.quiz.correct_answer, 'A');
+  assert.equal(normalized.breakdown_steps[0].step, 'First');
+  assert.equal(normalized.quiz[0].correctAnswer, 'A');
 });

@@ -148,31 +148,35 @@ app.post('/api/auth/signin', async (req, res) => {
 });
 
 app.post('/api/analyze', async (req, res) => {
-  const { inputContent } = req.body || {};
+  const { concept, targetAudience } = req.body || {};
 
-  if (typeof inputContent !== 'string' || inputContent.trim() === '') {
+  if (typeof concept !== 'string' || concept.trim() === '') {
     return res.status(400).json({
-      error: 'Input content or code snippet is required.',
+      error: 'A concept or code snippet is required.',
+    });
+  }
+
+  if (typeof targetAudience !== 'string' || targetAudience.trim() === '') {
+    return res.status(400).json({
+      error: 'A target audience is required.',
     });
   }
 
   const prompt = `
 You are an expert interactive micro-mentor and visual explainer for SkillScribe.
-Analyze the following text, code, or concept provided by the user and break it down clearly.
-Keep explanations concise, direct, and focused on the key idea.
+Explain the concept clearly for the specified target audience. Keep the content concise and accurate.
 
-User Input:
+Concept:
 """
-${inputContent}
+${concept.trim()}
 """
 
-Return a valid JSON object with exactly these keys:
-- "analogy": A simple, memorable visual or real-world analogy explaining the core concept.
-- "breakdown_steps": An array of 3 distinct, concise step objects, each having "title" and "description".
-- "quiz": An object containing a "question" string, an "options" array of 4 choices, and the "correct_answer" string.
-- "code_snippet": A highlighted code snippet or text summary if applicable, or null.
+Target audience:
+"""
+${targetAudience.trim()}
+"""
 
-Return pure JSON without any extra text or conversational filler.
+Return exactly one JSON object matching the supplied response schema, with no additional keys or surrounding text.
 `;
 
   try {
@@ -186,10 +190,8 @@ Return pure JSON without any extra text or conversational filler.
           systemInstruction: `
 You are SkillScribe's technical educator.
 Return exactly one JSON object matching the supplied response schema:
-- analogy: a concise explanation using a real-world comparison
-- breakdown_steps: exactly 3 items, each with title and description
-- quiz: one object with question, 4 options, and correct_answer
-- code_snippet: a short relevant snippet or null
+- breakdown_steps contains exactly 4 objects with step and explanation strings
+- quiz is an array containing exactly 1 quiz object
 Never replace the requested analysis with a title/description summary.
           `.trim(),
           maxOutputTokens: 1024,
@@ -204,31 +206,41 @@ Never replace the requested analysis with a title/description summary.
                 items: {
                   type: Type.OBJECT,
                   properties: {
-                    title: { type: Type.STRING },
-                    description: { type: Type.STRING },
+                    step: { type: Type.STRING },
+                    explanation: { type: Type.STRING },
                   },
-                  required: ['title', 'description'],
+                  required: ['step', 'explanation'],
                 },
-                minItems: 3,
-                maxItems: 3,
+                minItems: 4,
+                maxItems: 4,
               },
               quiz: {
-                type: Type.OBJECT,
-                properties: {
-                  question: { type: Type.STRING },
-                  options: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                    minItems: 4,
-                    maxItems: 4,
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    question: { type: Type.STRING },
+                    options: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      minItems: 4,
+                      maxItems: 4,
+                    },
+                    correctAnswer: { type: Type.STRING },
+                    explanation: { type: Type.STRING },
                   },
-                  correct_answer: { type: Type.STRING },
+                  required: [
+                    'question',
+                    'options',
+                    'correctAnswer',
+                    'explanation',
+                  ],
                 },
-                required: ['question', 'options', 'correct_answer'],
+                minItems: 1,
+                maxItems: 1,
               },
-              code_snippet: { type: Type.STRING, nullable: true },
             },
-            required: ['analogy', 'breakdown_steps', 'quiz', 'code_snippet'],
+            required: ['analogy', 'breakdown_steps', 'quiz'],
           },
         },
       });

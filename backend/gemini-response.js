@@ -97,11 +97,11 @@ function isRecord(value) {
 function normalizeKnownKeys(value, aliases) {
   if (!isRecord(value)) return value;
 
-  const normalized = { ...value };
+  const normalized = {};
   for (const [key, fieldValue] of Object.entries(value)) {
     const compactKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const canonicalKey = aliases[compactKey];
-    if (canonicalKey && normalized[canonicalKey] === undefined) {
+    const canonicalKey = aliases[compactKey] || key;
+    if (normalized[canonicalKey] === undefined) {
       normalized[canonicalKey] = fieldValue;
     }
   }
@@ -130,27 +130,33 @@ function normalizeGeminiAnalysis(parsedData) {
     stepbystepbreakdown: 'breakdown_steps',
     quiz: 'quiz',
     quizquestions: 'quiz',
-    codesnippet: 'code_snippet',
   });
 
   if (Array.isArray(normalized && normalized.breakdown_steps)) {
     normalized.breakdown_steps = normalized.breakdown_steps.map((step) =>
       normalizeKnownKeys(step, {
-        title: 'title',
-        step: 'title',
-        description: 'description',
-        explanation: 'description',
+        step: 'step',
+        title: 'step',
+        explanation: 'explanation',
+        description: 'explanation',
       })
     );
   }
 
   if (isRecord(normalized && normalized.quiz)) {
-    normalized.quiz = normalizeKnownKeys(normalized.quiz, {
-      question: 'question',
-      options: 'options',
-      choices: 'options',
-      correctanswer: 'correct_answer',
-    });
+    normalized.quiz = [normalized.quiz];
+  }
+
+  if (Array.isArray(normalized && normalized.quiz)) {
+    normalized.quiz = normalized.quiz.map((quiz) =>
+      normalizeKnownKeys(quiz, {
+        question: 'question',
+        options: 'options',
+        choices: 'options',
+        correctanswer: 'correctAnswer',
+        explanation: 'explanation',
+      })
+    );
   }
 
   return normalized;
@@ -165,6 +171,12 @@ function describeShape(value) {
 
 function validateGeminiAnalysis(parsedData) {
   const invalidFields = [];
+  const hasOnlyKeys = (value, allowedKeys) =>
+    isRecord(value) && Object.keys(value).every((key) => allowedKeys.includes(key));
+
+  if (!hasOnlyKeys(parsedData, ['analogy', 'breakdown_steps', 'quiz'])) {
+    invalidFields.push('keys');
+  }
 
   if (!parsedData || typeof parsedData.analogy !== 'string') {
     invalidFields.push('analogy');
@@ -172,12 +184,13 @@ function validateGeminiAnalysis(parsedData) {
 
   if (
     !Array.isArray(parsedData && parsedData.breakdown_steps) ||
-    parsedData.breakdown_steps.length !== 3 ||
+    parsedData.breakdown_steps.length !== 4 ||
     !parsedData.breakdown_steps.every(
       (step) =>
         step &&
-        typeof step.title === 'string' &&
-        typeof step.description === 'string'
+        hasOnlyKeys(step, ['step', 'explanation']) &&
+        typeof step.step === 'string' &&
+        typeof step.explanation === 'string'
     )
   ) {
     invalidFields.push('breakdown_steps');
@@ -185,12 +198,25 @@ function validateGeminiAnalysis(parsedData) {
 
   if (
     !parsedData ||
-    !parsedData.quiz ||
-    typeof parsedData.quiz.question !== 'string' ||
-    !Array.isArray(parsedData.quiz.options) ||
-    parsedData.quiz.options.length !== 4 ||
-    !parsedData.quiz.options.every((option) => typeof option === 'string') ||
-    typeof parsedData.quiz.correct_answer !== 'string'
+    !Array.isArray(parsedData.quiz) ||
+    parsedData.quiz.length !== 1 ||
+    !parsedData.quiz.every(
+      (quiz) =>
+        quiz &&
+        hasOnlyKeys(quiz, [
+          'question',
+          'options',
+          'correctAnswer',
+          'explanation',
+        ]) &&
+        typeof quiz.question === 'string' &&
+        Array.isArray(quiz.options) &&
+        quiz.options.length === 4 &&
+        quiz.options.every((option) => typeof option === 'string') &&
+        typeof quiz.correctAnswer === 'string' &&
+        quiz.options.includes(quiz.correctAnswer) &&
+        typeof quiz.explanation === 'string'
+    )
   ) {
     invalidFields.push('quiz');
   }
